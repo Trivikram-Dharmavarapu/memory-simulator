@@ -1,0 +1,14 @@
+To compile:
+gcc -c memhier.cpp
+
+To Build .exe:
+g++ -o memhier.exe memhier.cpp
+
+To Run:
+.\memhier
+
+To remove previous executables:
+del *.o ; del *.exe
+
+//
+del *.o ; del *.exe ; g++ memhier.cpp ; g++ memhier.cpp -o memhier.exe ; ./memhier ; .\memhier
