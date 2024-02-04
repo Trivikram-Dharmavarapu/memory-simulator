@@ -7,8 +7,11 @@
 #include <deque>
 #include <bitset>
 #include <map>
+#include <limits>
 
 using namespace std;
+
+const int POSITIVE_INFINITY = numeric_limits<int>::max();
 
 struct DataTLBConfig
 {
@@ -38,7 +41,6 @@ struct MemoryConfig
     int pageSize;
 };
 
-// Main Configuration structure
 struct Configuration
 {
     DataTLBConfig dtlbConfig;
@@ -50,26 +52,25 @@ struct Configuration
     bool useL2Cache;
 } config;
 
-// Define TLB entry structure
 struct TLBData
 {
     int tag;
     int physicalPageNumber;
     bool valid;
     int index;
+    int count;
 };
 
-// Define Cache entry structure
-struct CacheEntry
+struct Cache
 {
     int tag;
     bool valid;
     bool dirty;
     int physicalPage;
     int index;
+    int count;
 };
 
-// Define Memory Page structure
 struct Page
 {
     bool dirty;
@@ -77,13 +78,13 @@ struct Page
     int index;
     int virtualPage;
     int valid;
+    int count;
 };
 
-// Define Memory Hierarchy components
-vector<TLBData> tlbDataList;      // Data TLB
-vector<CacheEntry> dc;      // Data Cache
-vector<CacheEntry> l2Cache; // L2 Cache
-vector<Page> pageTableList;     // Page Table
+vector<TLBData> tlbDataList; // Data TLB
+vector<Cache> dcList;        // Data Cache
+vector<Cache> l2CacheList;   // L2 Cache
+vector<Page> pageTableList;  // Page Table
 
 int ptHits;
 int ptFaults;
@@ -103,13 +104,105 @@ double dtlbHitRatio;
 double ptHitRatio;
 double dcHitRatio;
 double l2HitRatio;
-int pageOffSetBits;
-int VPNBits;
-int indexBits;
-int tagBits;
-int totalBits;
-const int MAX_BITS= 32;
-int currenPhysicalPageAddress=-1;
+int pageOffSetBits, VPNBits, indexBits, tagBits, totalBits,physicalPageBits;
+int dcIndexBits, dcOffsetBits, dcTagBits, dcTotalBits;
+int l2IndexBits, l2OffsetBits, l2TagBits, l2TotalBits;
+const int MAX_BITS = 32;
+int currenPhysicalPageAddress = -1;
+
+
+int concatBits(int value1, int value2)
+{
+    // Convert integers to binary strings
+    bitset<MAX_BITS / 2> binaryValue1(value1);
+    bitset<MAX_BITS / 2> binaryValue2(value2);
+    // cout<<binaryValue1.to_string()<<endl;
+    // cout<<binaryValue2.to_string()<<endl;
+
+    // Concatenate integers
+    string binaryString1 = binaryValue1.to_string();
+    binaryString1.erase(0, binaryString1.find_first_not_of('0'));
+
+    string binaryString2 = binaryValue2.to_string();
+    binaryString2.erase(0, binaryString2.find_first_not_of('0'));
+
+    // Concatenate binary strings
+    string concatenatedBinary = binaryString1 + binaryString2;
+    // cout<<concatenatedBinary<<endl;
+    // Convert concatenated binary string to an integer
+    int result = std::bitset<MAX_BITS>(concatenatedBinary).to_ulong();
+
+    return result;
+}
+
+int concatAsHex(string hexValue1, string hexValue2)
+{
+    string concatenatedHex = hexValue1 + hexValue2;
+
+    // Convert concatenated hex string to an integer
+    int result;
+    istringstream(concatenatedHex) >> hex >> result;
+
+    return result;
+}
+
+string convertHex(int value, int offSet)
+{
+    if(offSet==0){
+        offSet=1;
+    }
+    ostringstream stream;
+    stream << hex << std::setw(offSet) << setfill('0') << value;
+    return stream.str();
+}
+
+template <typename T>
+int LRU(const std::vector<T> &list)
+{
+    int index = 0;
+    int lruIndex = 0;
+    int minValue = POSITIVE_INFINITY;
+    for (const auto &item : list)
+    {
+        if (minValue > item.count)
+        {
+            minValue = item.count;
+            lruIndex = index;
+        }
+        index++;
+    }
+    return lruIndex;
+}
+
+void calculateBits()
+{
+    pageOffSetBits = log2(config.ptConfig.pageSize);
+    indexBits = log2(config.dtlbConfig.numSets);
+    totalBits = log2(config.ptConfig.numPhysicalPages * config.ptConfig.numVirtualPages * config.ptConfig.pageSize);//virtual
+    tagBits = totalBits - pageOffSetBits - indexBits;
+    VPNBits = tagBits + indexBits;
+    physicalPageBits = log2(config.ptConfig.numPhysicalPages);
+
+    //DC
+    dcIndexBits=log2(config.dcConfig.numSets);
+    dcOffsetBits=log2(config.dcConfig.lineSize);
+    dcTotalBits = log2(config.ptConfig.numPhysicalPages*config.ptConfig.pageSize);
+    dcTagBits = dcTotalBits - dcIndexBits - dcOffsetBits;
+    // cout<<"dcOffsetBits: "<<dcOffsetBits<<endl;
+    // cout<<"dcIndexBits :"<<dcIndexBits<<endl;
+    // cout<<"dcTagBits: "<<dcTagBits<<endl;
+    // cout<<"dcTotalBits :"<<dcTotalBits<<endl;
+
+    //L2
+    l2IndexBits=log2(config.l2Config.numSets);
+    l2OffsetBits=log2(config.l2Config.lineSize);
+    l2TotalBits = log2(config.ptConfig.numPhysicalPages*config.ptConfig.pageSize);
+    l2TagBits = l2TotalBits - l2IndexBits - l2OffsetBits;
+    // cout<<"l2OffsetBits: "<<dec<<l2OffsetBits<<endl;
+    // cout<<"l2IndexBits :"<<l2IndexBits<<endl;
+    // cout<<"l2TagBits: "<<l2TagBits<<endl;
+    // cout<<"l2TotalBits :"<<l2TotalBits<<endl;
+}
 
 Configuration readConfigFile(const string &filename)
 {
@@ -226,7 +319,6 @@ Configuration readConfigFile(const string &filename)
     return config;
 }
 
-// Function to read the trace file
 vector<string> readTraceFile(const string &traceFile)
 {
     vector<string> traceData;
@@ -247,56 +339,12 @@ vector<string> readTraceFile(const string &traceFile)
     return traceData;
 }
 
-int extractBits(int value, int startBit, int endBit) {
-   bitset<MAX_BITS> binaryValue(value);
-   string result;
-    int paddingZeros=0;
-    // cout<<value<<endl;
-    // cout<<startBit<<" "<<endBit<<endl;
-    // cout<<binaryValue<<endl;
-    if (binaryValue.size() > totalBits)
-    {
-        paddingZeros = binaryValue.size() - totalBits +1;
-        // cout<<binaryValue.to_string().substr(paddingZeros-1,binaryValue.size())<<endl;
-        result = (binaryValue.to_string().substr(paddingZeros-1,binaryValue.size())).substr(startBit, endBit - startBit);
-    }
-    else
-    {
-        paddingZeros = totalBits - binaryValue.size();
-        string padding ="";
-        for(int i=0;i<paddingZeros;i++){
-            padding = padding+'0';
-        }
-        result = (padding +binaryValue.to_string()).substr(startBit, endBit - startBit);
-    }
-    // cout<<result<<endl;
-    return bitset<MAX_BITS>(result).to_ulong();;
-}
-
-int getVirtualPageNumber(int tag, int index) {
-   // Convert integers to binary strings
-    bitset<MAX_BITS/2> binaryValue1(tag);
-    bitset<MAX_BITS/2> binaryValue2(index);
-
-
-    // Concatenate binary strings
-    string concatenatedBinary = binaryValue1.to_string() + binaryValue2.to_string();
-
-    // Convert concatenated binary string to an integer
-    int result = bitset<MAX_BITS>(concatenatedBinary).to_ulong();
-
-    return result;
-}
-
-
-// Function to print cache configuration details
 void printDataTLBConfig(const DataTLBConfig &tlbConfig)
 {
     cout << "Number of Sets: " << tlbConfig.numSets << endl;
     cout << "Set Size: " << tlbConfig.setSize << endl;
 }
 
-// Function to print cache configuration details
 void printDataCacheConfig(const DataCacheConfig &cacheConfig)
 {
     cout << "Number of Sets: " << cacheConfig.numSets << endl;
@@ -312,7 +360,6 @@ void printL2CacheConfig(const L2CacheConfig &cacheConfig)
     cout << "Line Size: " << cacheConfig.lineSize << endl;
 }
 
-// Function to print memory configuration details
 void printMemoryConfig(const MemoryConfig &memoryConfig)
 {
     cout << "Number of Virtual Pages: " << memoryConfig.numVirtualPages << endl;
@@ -320,7 +367,6 @@ void printMemoryConfig(const MemoryConfig &memoryConfig)
     cout << "Page Size: " << memoryConfig.pageSize << endl;
 }
 
-// Function to print configuration details
 void printConfiguration()
 {
     cout << "Data TLB configuration:" << endl;
@@ -340,274 +386,35 @@ void printConfiguration()
     cout << "L2 Cache: " << (config.useL2Cache ? "yes" : "no") << endl;
 }
 
-void printDTLB() {
-    cout<<"DTLB Data"<<endl;
-    for (TLBData tlbData  : tlbDataList) {
-        cout<<" inex: "<<tlbData.index<<" VPN: "<<hex<<getVirtualPageNumber(tlbData.tag,tlbData.index)<<" PP: "<<" "<<tlbData.physicalPageNumber<<endl;
-    }
-}
-void printPageTable() {
-    cout<<"DTLB Data"<<endl;
-    for (Page page  : pageTableList) {
-        cout<<" physicalPage: "<<page.physicalPage<<" VPN: "<<page.virtualPage<<endl;
-    }
-}
-void initializeMemoryHierarchy()
+void printDTLB()
 {
-    dtlbHits = 0;
-    dtlbMisses = 0;
-    ptHits = 0;
-    ptFaults = 0;
-    dcHits = 0;
-    dcMisses = 0;
-    l2Hits = 0;
-    l2Misses = 0;
-    totalReads = 0;
-    totalWrites = 0;
-    mainMemoryRefs = 0;
-    pageTableRefs = 0;
-    diskRefs = 0;
-    pageOffSetBits = log2(config.ptConfig.pageSize);
-    //cout<<pageOffSetBits<<endl;
-    indexBits = log2(config.dtlbConfig.numSets);
-    //cout<<indexBits<<endl;
-    totalBits = log2(config.ptConfig.numPhysicalPages*config.ptConfig.numVirtualPages*config.ptConfig.pageSize);
-    tagBits = totalBits - pageOffSetBits - indexBits;
-    VPNBits = tagBits+indexBits;
-    //cout<<tagBits<<endl;
-
-    // Initialize TLB
-    tlbDataList.resize(config.dtlbConfig.numSets * config.dtlbConfig.setSize);
-    // Initialize Data Cache
-    dc.resize(config.dcConfig.numSets * config.dcConfig.setSize);
-
-    // Initialize L2 Cache
-    l2Cache.resize(config.l2Config.numSets * config.l2Config.setSize);
-
-    // Initialize Page Table
-    pageTableList.resize(config.ptConfig.numPhysicalPages);
-
-    // Initialize physical pages
-    for (int i = 0; i < config.ptConfig.numPhysicalPages; ++i)
+    cout << "DTLB Data" << endl;
+    for (TLBData tlbData : tlbDataList)
     {
-        Page page;
-        page.physicalPage = -1;
-        page.index =-1;
-        page.valid = false;
-        page.dirty = false;
-        pageTableList[i] = page;
-    }
-
-    // Initialization of TLB entries
-    for (int i = 0; i < tlbDataList.size(); ++i)
-    {
-        TLBData entry;
-        entry.valid = false;
-        entry.physicalPageNumber=-1;
-        tlbDataList[i] = entry;
-    }
-
-    // Initialization of Data Cache entries
-    for (int i = 0; i < dc.size(); ++i)
-    {
-        CacheEntry entry;
-        entry.valid = false;
-        // Initialize other fields as needed
-        dc[i] = entry;
-    }
-
-    // Initialization of L2 Cache entries
-    for (int i = 0; i < l2Cache.size(); ++i)
-    {
-        CacheEntry entry;
-        entry.valid = false;
-        // Initialize other fields as needed
-        l2Cache[i] = entry;
+        cout << " inex: " << tlbData.index << " VPN: " << hex << concatBits(tlbData.tag, tlbData.index) << " PP: "
+             << " " << tlbData.physicalPageNumber << endl;
     }
 }
 
-// Helper function for Data Cache access
-CacheEntry performDataCacheAccess(const Page &page, int pageOffset, char accessType)
+void printPageTable()
 {
-    int index = (page.physicalPage * config.ptConfig.pageSize + pageOffset) % config.dcConfig.numSets;
-
-    if (dc[index].valid && dc[index].tag == page.physicalPage)
+    cout << "Page Table Data" << endl;
+    for (Page page : pageTableList)
     {
-        // Data Cache hit
-        dcHits++;
-        return dc[index];
-    }
-    else
-    {
-        // Data Cache miss
-        dcMisses++;
-        CacheEntry dcEntry;
-        dcEntry.valid = false;
-
-        // Fetch data from the next level (e.g., memory) and update Data Cache
-        // For simplicity, let's assume data is always present in the next level
-        dcEntry.tag = page.physicalPage;
-        dcEntry.valid = true;
-        dcEntry.dirty = false;
-
-        // Update Data Cache
-        dc[index] = dcEntry;
-
-        return dcEntry;
+        cout << " physicalPage: " << page.physicalPage << " VPN: " << page.virtualPage << " count:" << page.count << endl;
     }
 }
 
-// Helper function for L2 Cache access
-CacheEntry performL2CacheAccess(const CacheEntry &dcEntry, int pageOffset, char accessType)
+void printDC()
 {
-    int index = (dcEntry.physicalPage * config.ptConfig.pageSize + pageOffset) % config.l2Config.numSets;
-
-    if (l2Cache[index].valid && l2Cache[index].tag == dcEntry.physicalPage)
+    cout <<endl<< "DC DATA" << endl;
+    for (Cache dcData : dcList)
     {
-        // L2 Cache hit
-        l2Hits++;
-        return l2Cache[index];
-    }
-    else
-    {
-        // L2 Cache miss
-        l2Misses++;
-        CacheEntry l2Entry;
-        l2Entry.valid = false;
-
-        // Fetch data from the next level (e.g., memory) and update L2 Cache
-        // For simplicity, let's assume data is always present in the next level
-        l2Entry.tag = dcEntry.physicalPage;
-        l2Entry.valid = true;
-        l2Entry.dirty = false;
-
-        // Update L2 Cache
-        l2Cache[index] = l2Entry;
-
-        return l2Entry;
+        cout << " dc: " << dcData.index << " tag: " << dcData.tag << " count:" << dcData.count << endl;
     }
 }
 
-// Helper function for Page Table lookup
-Page performPageTableLookup( int virtualPageNumber)
-{
-    for(Page pageData:pageTableList){
-        if(pageData.virtualPage==virtualPageNumber){
-            cout<<" page hit |";
-            ptHits++;
-            return pageData;
-        }
-
-    }
-    if(currenPhysicalPageAddress < config.ptConfig.numPhysicalPages-1 ){
-        currenPhysicalPageAddress++;
-    }
-    else{
-        currenPhysicalPageAddress=0;
-    }
-    cout<<" page Miss |";
-    ptFaults++;
-    Page pageData;
-    pageData.physicalPage = currenPhysicalPageAddress;
-    pageData.index = currenPhysicalPageAddress;
-    pageData.virtualPage = virtualPageNumber;
-    pageTableList[currenPhysicalPageAddress] = pageData;
-
-    return pageData;
-}
-
-TLBData performTLBLookup(int virtualAddress)
-{
-    TLBData tLBData;
-    int virtualPageNumber =  extractBits(virtualAddress,0,VPNBits);
-    int index = extractBits(virtualAddress,tagBits,tagBits+indexBits);
-
-    if (getVirtualPageNumber(tlbDataList[index].tag,tlbDataList[index].index) == virtualPageNumber)
-    {
-        dtlbHits++;
-         cout<<" TLB hit |";
-        tLBData = tlbDataList[index];
-    }
-    else
-    {
-        dtlbMisses++;
-         cout<<" TLB Miss |";
-        Page pageData = performPageTableLookup(virtualPageNumber);
-        TLBData tlbEntry;
-        tlbEntry.tag = extractBits(virtualAddress,0,tagBits);
-        tlbEntry.index = index;
-        tlbEntry.physicalPageNumber = pageData.physicalPage;
-        tlbEntry.valid = false;
-        tlbDataList[index] = tlbEntry;
-
-        tLBData = tlbEntry;
-    }
-
-    return tLBData;
-}
-
-
-void simulateMemoryAccess(string address, char accessType)
-{
-    int virtualAddress = stoi(address, nullptr, 16);
-
-    cout<<address<<" | ";
-    cout<<"VPN : " << hex << extractBits(virtualAddress,0,VPNBits) <<" | ";
-    cout<<"pageOffset : " <<hex<< extractBits(virtualAddress,tagBits+indexBits,tagBits+indexBits+pageOffSetBits) <<" | ";
-    cout<<"Tag : " << extractBits(virtualAddress,0,tagBits) <<" | ";
-    cout<<"Tlb index : " << extractBits(virtualAddress,tagBits,tagBits+indexBits) <<" | ";
-
-    // Simulate TLB lookup
-    TLBData tlbEntry = performTLBLookup(virtualAddress);
-    cout<<"Page Index: "<<tlbEntry.physicalPageNumber<<endl;
-    // printDTLB();
-    // printPageTable();
-    // cout<<tlbEntry.physicalPageNumber<<endl;
-
-    // Simulate Data Cache access
-    // CacheEntry dcEntry = performDataCacheAccess( page, pageOffset, accessType);
-
-    // // Simulate L2 Cache access if enabled
-    // CacheEntry l2Entry;
-    // if (config.useL2Cache)
-    // {
-    //     l2Entry = performL2CacheAccess( dcEntry, pageOffset, accessType);
-    // }
-
-    // // Increment total reads or writes based on access type
-    // if (accessType == 'R')
-    // {
-    //     totalReads++;
-    // }
-    // else if (accessType == 'W')
-    // {
-    //     totalWrites++;
-    // }
-
-    // // Update cache hit ratios
-    // dtlbHitRatio = (dtlbHits * 1.0) / (dtlbHits + dtlbMisses);
-    // ptHitRatio = (ptHits * 1.0) / (ptHits + ptFaults);
-    // dcHitRatio = (dcHits * 1.0) / (dcHits + dcMisses);
-    // l2HitRatio = (l2Hits * 1.0) / (l2Hits + l2Misses);
-
-    // // Increment main memory references
-    // mainMemoryRefs++;
-
-    // // Increment page table references if TLB is not used or TLB miss
-    // if (!config.useTLB || (config.useTLB && !tlbEntry.valid))
-    // {
-    //     pageTableRefs++;
-    // }
-
-    // // Increment disk references in case of a TLB miss or a page table fault
-    // if (!tlbEntry.valid || !page.valid)
-    // {
-    //     diskRefs++;
-    // }
-}
-
-
-void printMemoryAccessInfo(const Configuration &config, int address, const TLBData &tlbResult, const Page &ptResult, const CacheEntry &dcResult, const CacheEntry &l2Result)
+void printMemoryAccessInfo(const Configuration &config, int address, const TLBData &tlbResult, const Page &ptResult, const Cache &dcResult, const Cache &l2Result)
 {
     cout << "Virtual Address: " << address << endl;
 
@@ -645,7 +452,6 @@ void printMemoryAccessInfo(const Configuration &config, int address, const TLBDa
     cout << "------------------------" << endl;
 }
 
-
 void printSimulationStatistics()
 {
     dtlbHitRatio = static_cast<double>(dtlbHits) / (dtlbHits + dtlbMisses);
@@ -674,11 +480,282 @@ void printSimulationStatistics()
     cout << "disk refs : " << diskRefs << endl;
 }
 
+int extractBits(int value, int startBit, int endBit, int totalBits)
+{
+    bitset<MAX_BITS> binaryValue(value);
+    string result;
+    int paddingZeros = 0;
+    // cout<<value<<endl;
+    // cout<<"total :"<<totalBits<<endl;
+    // cout<<startBit<<" "<<endBit<<endl;
+    // cout<<binaryValue<<endl;
+    if (binaryValue.size() > totalBits)
+    {
+        paddingZeros = binaryValue.size() - totalBits + 1;
+        // cout<<binaryValue.to_string().substr(paddingZeros-1,binaryValue.size())<<endl;
+        result = (binaryValue.to_string().substr(paddingZeros - 1, binaryValue.size())).substr(startBit, endBit - startBit);
+    }
+    else
+    {
+        paddingZeros = totalBits - binaryValue.size();
+        string padding = "";
+        for (int i = 0; i < paddingZeros; i++)
+        {
+            padding = padding + '0';
+        }
+        // result = (padding + binaryValue.to_string()).substr(startBit, endBit - startBit);
+    }
+    // cout<<result<<endl;
+    return bitset<MAX_BITS>(result).to_ulong();
+    ;
+}
+
+void initializeMemoryHierarchy()
+{
+    dtlbHits = 0;
+    dtlbMisses = 0;
+    ptHits = 0;
+    ptFaults = 0;
+    dcHits = 0;
+    dcMisses = 0;
+    l2Hits = 0;
+    l2Misses = 0;
+    totalReads = 0;
+    totalWrites = 0;
+    mainMemoryRefs = 0;
+    pageTableRefs = 0;
+    diskRefs = 0;
+
+    calculateBits();
+
+    tlbDataList.resize(config.dtlbConfig.numSets * config.dtlbConfig.setSize);
+    dcList.resize(config.dcConfig.numSets * config.dcConfig.setSize);
+    l2CacheList.resize(config.l2Config.numSets * config.l2Config.setSize);
+    pageTableList.resize(config.ptConfig.numPhysicalPages);
+    for (int i = 0; i < config.ptConfig.numPhysicalPages; ++i)
+    {
+        Page page;
+        page.physicalPage = -1;
+        page.index = -1;
+        page.valid = false;
+        page.dirty = false;
+        page.count = 0;
+        pageTableList[i] = page;
+    }
+
+    for (int i = 0; i < tlbDataList.size(); ++i)
+    {
+        TLBData entry;
+        entry.valid = false;
+        entry.physicalPageNumber = -1;
+        entry.count = 0;
+        tlbDataList[i] = entry;
+    }
+    for (int i = 0; i < dcList.size(); ++i)
+    {
+        Cache entry;
+        entry.valid = false;
+        entry.count = 0;
+        entry.index=-1;
+        entry.tag=-1;
+        dcList[i] = entry;
+    }
+    for (int i = 0; i < l2CacheList.size(); ++i)
+    {
+        Cache entry;
+        entry.valid = false;
+        entry.count = 0;
+        entry.index=-1;
+        entry.tag=-1;
+        l2CacheList[i] = entry;
+    }
+}
+
+Cache performL2CacheAccess(int physicalAddess ,int pageOffset, char accessType)
+{
+    Cache l2Cache;
+    int index = extractBits(physicalAddess,l2TagBits,l2TagBits+l2IndexBits, l2TotalBits);
+    int tag = extractBits(physicalAddess,0, l2TagBits,l2TotalBits);
+    cout<<" l2tag: "<< hex << tag <<" | ";
+    cout<<" l2Index: "<<index<<" | ";
+    if (l2CacheList[index].tag == tag)
+    {
+        cout<<" l2Hit | ";
+        l2Hits++;
+        l2CacheList[index].count++;
+        l2Cache = l2CacheList[index];
+    }
+    else
+    {
+        cout<<" l2Miss | ";
+        l2Misses++;
+        Cache l2Entry;
+        l2Entry.tag = tag;
+        l2Entry.valid = true;
+        l2Entry.dirty = false;
+        l2Entry.index = index;
+        l2Entry.count =0;
+        l2CacheList[index] = l2Entry;
+        l2Cache = l2CacheList[index];
+    }
+    return l2Cache;
+}
+
+Cache performDataCacheAccess(int physicalAddess, int pageOffSet, char accessType)
+{
+    Cache dcCache;
+    int index = extractBits(physicalAddess,dcTagBits,dcTagBits+dcIndexBits, dcTotalBits);
+    int tag = extractBits(physicalAddess,0,dcTagBits,dcTotalBits);
+    // cout<<" dctag: "<< hex << extractBits(physicalAddess,0,dcTagBits,dcTotalBits)<<" | ";
+    // cout<<" dcIndex: "<<index<<" | ";
+    if (dcList[index].tag == tag)
+    {
+        cout<<" dcHit | ";
+        dcHits++;
+        dcList[index].count++;
+        dcCache = dcList[index];
+    }
+    else
+    {
+        cout<<" dcMiss | ";
+        dcMisses++;
+        Cache l2Cache = performL2CacheAccess(physicalAddess,pageOffSet, accessType);
+        Cache dcEntry;
+        dcEntry.tag = tag;
+        dcEntry.valid = true;
+        dcEntry.dirty = false;
+        dcEntry.index = index;
+        dcEntry.count =0;
+        dcList[index] = dcEntry;
+        dcCache = dcList[index];
+    }
+    return dcCache;
+}
+
+Page performPageTableLookup(int virtualPageNumber)
+{
+    for (int i = 0; i < pageTableList.size(); i++)
+    {
+        if (pageTableList[i].virtualPage == virtualPageNumber)
+        {
+            cout << " page hit |";
+            ptHits++;
+            pageTableList[i].count++;
+            return pageTableList[i];
+        }
+    }
+    if (currenPhysicalPageAddress < config.ptConfig.numPhysicalPages - 1)
+    {
+        currenPhysicalPageAddress++;
+    }
+    else
+    {
+        currenPhysicalPageAddress = LRU(pageTableList);
+    }
+    cout << " page Miss |";
+    ptFaults++;
+    Page pageData;
+    pageData.physicalPage = currenPhysicalPageAddress;
+    pageData.index = currenPhysicalPageAddress;
+    pageData.virtualPage = virtualPageNumber;
+    pageData.count = 0;
+    pageTableList[currenPhysicalPageAddress] = pageData;
+
+    return pageData;
+}
+
+TLBData performTLBLookup(int virtualAddress)
+{
+    TLBData tLBData;
+    int virtualPageNumber = extractBits(virtualAddress, 0, VPNBits, totalBits);
+    int index = extractBits(virtualAddress, tagBits, tagBits + indexBits, totalBits);
+
+    if (concatBits(tlbDataList[index].tag, tlbDataList[index].index)== virtualPageNumber)
+    {
+        dtlbHits++;
+        cout << " TLB hit | Page     | ";
+        tlbDataList[index].count++;
+        tLBData = tlbDataList[index];
+    }
+    else
+    {
+        dtlbMisses++;
+        cout << " TLB Miss |";
+        Page pageData = performPageTableLookup(virtualPageNumber);
+        TLBData tlbEntry;
+        tlbEntry.tag = extractBits(virtualAddress, 0, tagBits, totalBits);
+        tlbEntry.index = index;
+        tlbEntry.physicalPageNumber = pageData.physicalPage;
+        tlbEntry.valid = false;
+        tlbEntry.count = 0;
+        tlbDataList[index] = tlbEntry;
+
+        tLBData = tlbEntry;
+    }
+
+    return tLBData;
+}
+
+void simulateMemoryAccess(string address, char accessType)
+{
+    int virtualAddress = stoi(address, nullptr, 16);
+    int pageOffSet =  extractBits(virtualAddress, tagBits + indexBits, tagBits + indexBits + pageOffSetBits, totalBits);
+    cout << address << " | ";
+    cout << "VPN : " << hex << extractBits(virtualAddress, 0, VPNBits, totalBits) << " | ";
+    cout << "pageOffset : "  << extractBits(virtualAddress, tagBits + indexBits, tagBits + indexBits + pageOffSetBits, totalBits) << " | ";
+    cout << "Tag : " << extractBits(virtualAddress, 0, tagBits, totalBits) << " | ";
+    cout << "Tlb index : " << extractBits(virtualAddress, tagBits, tagBits + indexBits, totalBits) << " | ";
+
+    // Simulate TLB lookup
+    TLBData tlbEntry = performTLBLookup(virtualAddress);
+    cout << "Page Index: " << tlbEntry.physicalPageNumber<<" | ";
+    // printDTLB();
+    // printPageTable();
+
+    //DC LookUP
+    string pageValue = convertHex(tlbEntry.physicalPageNumber,config.ptConfig.numPhysicalPages/4);
+    string pageOffsetValue = convertHex(pageOffSet,pageOffSetBits/4);
+    int physicalAddress = concatAsHex(pageValue, pageOffsetValue);
+    // cout<<pageValue<<" : "<<pageOffsetValue<<" : "<<physicalAddress;
+    Cache dcCache = performDataCacheAccess( physicalAddress,pageOffSet, accessType);
+    // printDC();
+
+    if (accessType == 'R')
+    {
+        totalReads++;
+    }
+    else if (accessType == 'W')
+    {
+        totalWrites++;
+    }
+
+    // // Update cache hit ratios
+    // dtlbHitRatio = (dtlbHits * 1.0) / (dtlbHits + dtlbMisses);
+    // ptHitRatio = (ptHits * 1.0) / (ptHits + ptFaults);
+    // dcHitRatio = (dcHits * 1.0) / (dcHits + dcMisses);
+    // l2HitRatio = (l2Hits * 1.0) / (l2Hits + l2Misses);
+
+    // // Increment main memory references
+    // mainMemoryRefs++;
+
+    // // Increment page table references if TLB is not used or TLB miss
+    // if (!config.useTLB || (config.useTLB && !tlbEntry.valid))
+    // {
+    //     pageTableRefs++;
+    // }
+
+    // // Increment disk references in case of a TLB miss or a page table fault
+    // if (!tlbEntry.valid || !page.valid)
+    // {
+    //     diskRefs++;
+    // }
+}
+
 int main()
 {
     config = readConfigFile("./trace.config");
 
-    //printConfiguration();
+    // printConfiguration();
 
     // Read trace file
     vector<string> traceData = readTraceFile("./trace.dat");
@@ -690,9 +767,11 @@ int main()
         string hexAddress = traceEntry.substr(2); // Assuming hex address starts at index 2
 
         simulateMemoryAccess(hexAddress, accessType);
+        // performDataCacheAccess(284, 28);
+        cout<<endl;
     }
 
-    //printSimulationStatistics();
+    // printSimulationStatistics();
 
     return 0;
 }
