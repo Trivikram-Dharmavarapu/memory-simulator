@@ -8,6 +8,7 @@
 #include <bitset>
 #include <map>
 #include <limits>
+#include <cstring>
 
 using namespace std;
 
@@ -81,10 +82,28 @@ struct Page
     int count;
 };
 
+struct TraceData {
+    int virtualAddress=-1;
+    int virtualPage=-1;
+    int pageOffset=-1;
+    int tlbTag=-1;
+    int tlbIndex=-1;
+    char tlbRes[10];
+    char ptRes[10];
+    int physicalPage=-1;
+    int dcTag=-1;
+    int dcIndex=-1;
+    char dcRes[10];
+    int l2Tag=-1;
+    int l2Index=-1;
+    char l2Res[10];
+};
+
 vector<TLBData> tlbDataList; // Data TLB
 vector<Cache> dcList;        // Data Cache
 vector<Cache> l2CacheList;   // L2 Cache
 vector<Page> pageTableList;  // Page Table
+vector<TraceData> traceDataList;
 
 int ptHits;
 int ptFaults;
@@ -109,7 +128,17 @@ int dcIndexBits, dcOffsetBits, dcTagBits, dcTotalBits;
 int l2IndexBits, l2OffsetBits, l2TagBits, l2TotalBits;
 const int MAX_BITS = 32;
 int currenPhysicalPageAddress = -1;
+int trace =0;
 
+
+TraceData initTrace(){
+    TraceData traceData;
+    traceData.tlbRes[0]= '\0';
+    traceData.ptRes[0]= '\0';
+    traceData.dcRes[0]= '\0';
+    traceData.l2Res[0]= '\0';
+    return traceData;
+}
 
 int concatBits(int value1, int value2)
 {
@@ -414,44 +443,6 @@ void printDC()
     }
 }
 
-void printMemoryAccessInfo(const Configuration &config, int address, const TLBData &tlbResult, const Page &ptResult, const Cache &dcResult, const Cache &l2Result)
-{
-    cout << "Virtual Address: " << address << endl;
-
-    // Print TLB result
-    cout << "TLB Result:" << endl;
-    cout << "  Valid: " << (tlbResult.valid ? "Yes" : "No") << endl;
-    cout << "  Physical Page: " << tlbResult.physicalPageNumber << endl;
-    cout << "  TLB Hits: " << dtlbHits << endl;
-    cout << "  TLB Misses: " << dtlbMisses << endl;
-
-    // Print Page Table result
-    cout << "Page Table Result:" << endl;
-    cout << "  Valid: " << (ptResult.valid ? "Yes" : "No") << endl;
-    cout << "  Physical Page: " << ptResult.physicalPage << endl;
-    cout << "  Page Table Hits: " << ptHits << endl;
-    cout << "  Page Table Faults: " << ptFaults << endl;
-
-    // Print Data Cache result
-    cout << "Data Cache Result:" << endl;
-    cout << "  Valid: " << (dcResult.valid ? "Yes" : "No") << endl;
-    cout << "  Dirty: " << (dcResult.dirty ? "Yes" : "No") << endl;
-    cout << "  Data Cache Hits: " << dcHits << endl;
-    cout << "  Data Cache Misses: " << dcMisses << endl;
-
-    // Print L2 Cache result if used
-    if (config.useL2Cache)
-    {
-        cout << "L2 Cache Result:" << endl;
-        cout << "  Valid: " << (l2Result.valid ? "Yes" : "No") << endl;
-        cout << "  Dirty: " << (l2Result.dirty ? "Yes" : "No") << endl;
-        cout << "  L2 Cache Hits: " << l2Hits << endl;
-        cout << "  L2 Cache Misses: " << l2Misses << endl;
-    }
-
-    cout << "------------------------" << endl;
-}
-
 void printSimulationStatistics()
 {
     dtlbHitRatio = static_cast<double>(dtlbHits) / (dtlbHits + dtlbMisses);
@@ -459,25 +450,143 @@ void printSimulationStatistics()
     dcHitRatio = static_cast<double>(dcHits) / (dcHits + dcMisses);
     l2HitRatio = static_cast<double>(l2Hits) / (l2Hits + l2Misses);
 
-    cout << "Simulation statistics" << endl;
-    cout << "dtlb hits : " << dtlbHits << endl;
-    cout << "dtlb misses : " << dtlbMisses << endl;
-    cout << "dtlb hit ratio : " << fixed << setprecision(6) << dtlbHitRatio << endl;
-    cout << "pt hits : " << ptHits << endl;
-    cout << "pt faults : " << ptFaults << endl;
-    cout << "pt hit ratio : " << fixed << setprecision(6) << ptHitRatio << endl;
-    cout << "dc hits : " << dcHits << endl;
-    cout << "dc misses : " << dcMisses << endl;
-    cout << "dc hit ratio : " << fixed << setprecision(6) << dcHitRatio << endl;
-    cout << "L2 hits : " << l2Hits << endl;
-    cout << "L2 misses : " << l2Misses << endl;
-    cout << "L2 hit ratio : " << fixed << setprecision(6) << l2HitRatio << endl;
-    cout << "Total reads : " << totalReads << endl;
-    cout << "Total writes : " << totalWrites << endl;
-    cout << "Ratio of reads : " << fixed << setprecision(6) << ratioOfReads << endl;
-    cout << "main memory refs : " << mainMemoryRefs << endl;
-    cout << "page table refs : " << pageTableRefs << endl;
-    cout << "disk refs : " << diskRefs << endl;
+    // cout << endl<< "Simulation statistics" << endl<<endl;
+    // cout << "dtlb hits : " << dtlbHits << endl;
+    // cout << "dtlb misses : " << dtlbMisses << endl;
+    // cout << "dtlb hit ratio : " << fixed << setprecision(6) << dtlbHitRatio << endl<< endl;
+    // cout << "pt hits : " << ptHits << endl;
+    // cout << "pt faults : " << ptFaults << endl;
+    // cout << "pt hit ratio : " << fixed << setprecision(6) << ptHitRatio << endl<< endl;
+    // cout << "dc hits : " << dcHits << endl;
+    // cout << "dc misses : " << dcMisses << endl;
+    // cout << "dc hit ratio : " << fixed << setprecision(6) << dcHitRatio << endl<< endl;
+    // cout << "L2 hits : " << l2Hits << endl;
+    // cout << "L2 misses : " << l2Misses << endl;
+    // cout << "L2 hit ratio : " << fixed << setprecision(6) << l2HitRatio << endl<< endl;
+    // cout << "Total reads : " << totalReads << endl;
+    // cout << "Total writes : " << totalWrites << endl;
+    // cout << "Ratio of reads : " << fixed << setprecision(6) << ratioOfReads << endl<< endl;
+    // cout << "main memory refs : " << mainMemoryRefs << endl;
+    // cout << "page table refs : " << pageTableRefs << endl;
+    // cout << "disk refs : " << diskRefs << endl;
+
+    cout << endl << "Simulation statistics" << endl << endl;
+    cout << left << setw(20) << "dtlb hits : " << dtlbHits << endl;
+    cout << left << setw(20) << "dtlb misses : " << dtlbMisses << endl;
+    cout << left << setw(20) << "dtlb hit ratio : " << fixed << setprecision(6) << dtlbHitRatio << endl << endl;
+    cout << left << setw(20) << "pt hits : " << ptHits << endl;
+    cout << left << setw(20) << "pt faults : " << ptFaults << endl;
+    cout << left << setw(20) << "pt hit ratio : " << fixed << setprecision(6) << ptHitRatio << endl << endl;
+    cout << left << setw(20) << "dc hits : " << dcHits << endl;
+    cout << left << setw(20) << "dc misses : " << dcMisses << endl;
+    cout << left << setw(20) << "dc hit ratio : " << fixed << setprecision(6) << dcHitRatio << endl << endl;
+    cout << left << setw(20) << "L2 hits : " << l2Hits << endl;
+    cout << left << setw(20) << "L2 misses : " << l2Misses << endl;
+    cout << left << setw(20) << "L2 hit ratio : " << fixed << setprecision(6) << l2HitRatio << endl << endl;
+    cout << left << setw(20) << "Total reads : " << totalReads << endl;
+    cout << left << setw(20) << "Total writes : " << totalWrites << endl;
+    cout << left << setw(20) << "Ratio of reads : " << fixed << setprecision(6) << ratioOfReads << endl << endl;
+    cout << left << setw(20) << "main memory refs : " << mainMemoryRefs << endl;
+    cout << left << setw(20) << "page table refs : " << pageTableRefs << endl;
+    cout << left << setw(20) << "disk refs : " << diskRefs << endl;
+}
+
+void printConfig(){
+    string policy="";
+    if(config.dcConfig.writeThroughOrNoWriteAllocate == 'n'){
+        policy = "no ";
+    }
+    cout << "Data TLB contains " << config.dtlbConfig.numSets << " sets." << endl;
+    cout << "Each set contains " << config.dtlbConfig.setSize << " entries." << endl;
+    cout << "Number of bits used for the index is " << indexBits << "." << endl<<endl;
+
+    cout << "Number of virtual pages is " << config.ptConfig.numVirtualPages << "." << endl;
+    cout << "Number of physical pages is " << config.ptConfig.numPhysicalPages << "." << endl;
+    cout << "Each page contains " << config.ptConfig.pageSize << " bytes." << endl;
+    cout << "Number of bits used for the page table index is " << physicalPageBits << "." << endl;
+    cout << "Number of bits used for the page offset is " << pageOffSetBits << "." << endl<<endl;
+
+    cout << "D-cache contains " << config.dcConfig.numSets << " sets." << endl;
+    cout << "Each set contains " << config.dcConfig.setSize << " entries." << endl;
+    cout << "Each line is " << config.dcConfig.lineSize << " bytes." << endl;
+    
+    cout << "The cache uses a " << policy << "write-allocate and write-through policy." << endl;
+    cout << "Number of bits used for the index is " << dcIndexBits << "." << endl;
+    cout << "Number of bits used for the offset is " << dcOffsetBits << "." << endl<<endl;
+
+    cout << "L2-cache contains " << config.l2Config.numSets << " sets." << endl;
+    cout << "Each set contains " << config.l2Config.setSize << " entries." << endl;
+    cout << "Each line is " << config.l2Config.lineSize << " bytes." << endl;
+    cout << "Number of bits used for the index is " << l2IndexBits << "." << endl;
+    cout << "Number of bits used for the offset is " << l2OffsetBits << "." << endl<<endl;
+
+    cout << "The addresses read in are virtual addresses." << endl<<endl;
+}
+
+void printTraceData() {
+    size_t arraySize = traceDataList.size();
+    for (size_t i = 0; i < arraySize; ++i) {
+        // printf("%08x %6x %4x %8x %3x %4s %4s %3x %8x %3x %4s %8x %3x %4s\n",
+        //        traceDataList[i].virtualAddress, traceDataList[i].virtualPage, traceDataList[i].pageOffset,
+        //        traceDataList[i].tlbTag, traceDataList[i].tlbIndex, traceDataList[i].tlbRes, traceDataList[i].ptRes,
+        //        traceDataList[i].physicalPage, traceDataList[i].dcTag, traceDataList[i].dcIndex, traceDataList[i].dcRes,
+        //        traceDataList[i].l2Tag, traceDataList[i].l2Index, traceDataList[i].l2Res);
+       char formattedVirtualAddress[9];
+    char formattedVirtualPage[7];
+    char formattedPageOffset[5];
+    char formattedTlbTag[9];
+    char formattedTlbIndex[4];
+    char formattedTlbRes[5];
+    char formattedPtRes[5];
+    char formattedPhysicalPage[4];
+    char formattedDcTag[9];
+    char formattedDcIndex[4];
+    char formattedDcRes[5];
+    char formattedL2Tag[9];
+    char formattedL2Index[4];
+    char formattedL2Res[5];
+    // %08x %6x %4x %6x %3x %4s %4s %4x %6x %3x %4s %6x %3x %4s
+    // Format each field using snprintf
+    snprintf(formattedVirtualAddress, sizeof(formattedVirtualAddress), "%08x", traceDataList[i].virtualAddress);
+    snprintf(formattedVirtualPage, sizeof(formattedVirtualPage), traceDataList[i].virtualPage >= 0 ? "%6x" : "      ", traceDataList[i].virtualPage);
+    snprintf(formattedPageOffset, sizeof(formattedPageOffset), traceDataList[i].pageOffset >= 0 ? "%4x" : "    ", traceDataList[i].pageOffset);
+    snprintf(formattedTlbTag, sizeof(formattedTlbTag), traceDataList[i].tlbTag >= 0 ? "%6x" : "        ", traceDataList[i].tlbTag);
+    snprintf(formattedTlbIndex, sizeof(formattedTlbIndex), traceDataList[i].tlbIndex >= 0 ? "%3x" : "   ", traceDataList[i].tlbIndex);
+    snprintf(formattedTlbRes, sizeof(formattedTlbRes), traceDataList[i].tlbRes[0] != '\0' ? "%4s" : "    ", traceDataList[i].tlbRes);
+    snprintf(formattedPtRes, sizeof(formattedPtRes), traceDataList[i].ptRes[0] != '\0' ? "%4s" : "    ", traceDataList[i].ptRes);
+    snprintf(formattedPhysicalPage, sizeof(formattedPhysicalPage), traceDataList[i].physicalPage >=0 ? "%4x" : "   ", traceDataList[i].physicalPage);
+    snprintf(formattedDcTag, sizeof(formattedDcTag), traceDataList[i].dcTag >= 0 ? "%6x" : "        ", traceDataList[i].dcTag);
+    snprintf(formattedDcIndex, sizeof(formattedDcIndex), traceDataList[i].dcIndex >= 0 ? "%3x" : "   ", traceDataList[i].dcIndex);
+    snprintf(formattedDcRes, sizeof(formattedDcRes), traceDataList[i].dcRes[0] != '\0' ? "%4s" : "    ", traceDataList[i].dcRes);
+    snprintf(formattedL2Tag, sizeof(formattedL2Tag), traceDataList[i].l2Tag >= 0 ? "%6x" : "        ", traceDataList[i].l2Tag);
+    snprintf(formattedL2Index, sizeof(formattedL2Index), traceDataList[i].l2Index >= 0 ? "%3x" : "   ", traceDataList[i].l2Index);
+    snprintf(formattedL2Res, sizeof(formattedL2Res), traceDataList[i].l2Res[0] != '\0' ? "%4s" : "    ", traceDataList[i].l2Res);
+
+    // Print all fields
+    printf("%s %s %s %s %s %s %s %4x %s %s %s %s %s %s\n",
+        formattedVirtualAddress,
+        formattedVirtualPage,
+        formattedPageOffset,
+        formattedTlbTag,
+        formattedTlbIndex,
+        formattedTlbRes,
+        formattedPtRes,
+        traceDataList[i].physicalPage,
+        formattedDcTag,
+        formattedDcIndex,
+        formattedDcRes,
+        formattedL2Tag,
+        formattedL2Index,
+        formattedL2Res
+    );
+    }
+}
+
+void printHeader(){
+    printf("Virtual  Virt.  Page TLB    TLB TLB  PT   Phys        DC  DC          L2  L2\n");
+    printf("Address  Page # Off  Tag    Ind Res. Res. Pg # DC Tag Ind Res  L2 Tag Ind Res.\n");
+    printf("-------- ------ ---- ------ --- ---- ---- ---- ------ --- ---- ------ --- ----\n");
+
 }
 
 int extractBits(int value, int startBit, int endBit, int totalBits)
@@ -576,18 +685,22 @@ Cache performL2CacheAccess(int physicalAddess ,int pageOffset, char accessType)
     Cache l2Cache;
     int index = extractBits(physicalAddess,l2TagBits,l2TagBits+l2IndexBits, l2TotalBits);
     int tag = extractBits(physicalAddess,0, l2TagBits,l2TotalBits);
-    cout<<" l2tag: "<< hex << tag <<" | ";
-    cout<<" l2Index: "<<index<<" | ";
+    // cout<<" l2tag: "<< hex << tag <<" | ";
+    // cout<<" l2Index: "<<index<<" | ";
+
+    traceDataList[trace].l2Index = index;
+    traceDataList[trace].l2Tag=tag;
+
     if (l2CacheList[index].tag == tag)
     {
-        cout<<" l2Hit | ";
+        strcpy(traceDataList[trace].l2Res,"Hit ");
         l2Hits++;
         l2CacheList[index].count++;
         l2Cache = l2CacheList[index];
     }
     else
     {
-        cout<<" l2Miss | ";
+        strcpy(traceDataList[trace].l2Res,"Miss");
         l2Misses++;
         Cache l2Entry;
         l2Entry.tag = tag;
@@ -608,16 +721,20 @@ Cache performDataCacheAccess(int physicalAddess, int pageOffSet, char accessType
     int tag = extractBits(physicalAddess,0,dcTagBits,dcTotalBits);
     // cout<<" dctag: "<< hex << extractBits(physicalAddess,0,dcTagBits,dcTotalBits)<<" | ";
     // cout<<" dcIndex: "<<index<<" | ";
+
+    traceDataList[trace].dcIndex = index;
+    traceDataList[trace].dcTag=tag;
+
     if (dcList[index].tag == tag)
     {
-        cout<<" dcHit | ";
+        strcpy(traceDataList[trace].dcRes,"Hit ");
         dcHits++;
         dcList[index].count++;
         dcCache = dcList[index];
     }
     else
     {
-        cout<<" dcMiss | ";
+        strcpy(traceDataList[trace].dcRes,"Miss");
         dcMisses++;
         Cache l2Cache = performL2CacheAccess(physicalAddess,pageOffSet, accessType);
         Cache dcEntry;
@@ -638,7 +755,7 @@ Page performPageTableLookup(int virtualPageNumber)
     {
         if (pageTableList[i].virtualPage == virtualPageNumber)
         {
-            cout << " page hit |";
+            strcpy(traceDataList[trace].ptRes,"Hit ");
             ptHits++;
             pageTableList[i].count++;
             return pageTableList[i];
@@ -652,7 +769,7 @@ Page performPageTableLookup(int virtualPageNumber)
     {
         currenPhysicalPageAddress = LRU(pageTableList);
     }
-    cout << " page Miss |";
+    strcpy(traceDataList[trace].ptRes,"Miss");
     ptFaults++;
     Page pageData;
     pageData.physicalPage = currenPhysicalPageAddress;
@@ -669,21 +786,26 @@ TLBData performTLBLookup(int virtualAddress)
     TLBData tLBData;
     int virtualPageNumber = extractBits(virtualAddress, 0, VPNBits, totalBits);
     int index = extractBits(virtualAddress, tagBits, tagBits + indexBits, totalBits);
+    int tag = extractBits(virtualAddress, 0, tagBits, totalBits);
+
+    traceDataList[trace].virtualPage =  virtualPageNumber;
+    traceDataList[trace].tlbIndex = index;
+    traceDataList[trace].tlbTag = tag;
 
     if (concatBits(tlbDataList[index].tag, tlbDataList[index].index)== virtualPageNumber)
     {
         dtlbHits++;
-        cout << " TLB hit | Page     | ";
+        strcpy(traceDataList[trace].tlbRes,"Hit ");
         tlbDataList[index].count++;
         tLBData = tlbDataList[index];
     }
     else
     {
         dtlbMisses++;
-        cout << " TLB Miss |";
+        strcpy(traceDataList[trace].tlbRes,"Miss");
         Page pageData = performPageTableLookup(virtualPageNumber);
         TLBData tlbEntry;
-        tlbEntry.tag = extractBits(virtualAddress, 0, tagBits, totalBits);
+        tlbEntry.tag = tag;
         tlbEntry.index = index;
         tlbEntry.physicalPageNumber = pageData.physicalPage;
         tlbEntry.valid = false;
@@ -700,15 +822,12 @@ void simulateMemoryAccess(string address, char accessType)
 {
     int virtualAddress = stoi(address, nullptr, 16);
     int pageOffSet =  extractBits(virtualAddress, tagBits + indexBits, tagBits + indexBits + pageOffSetBits, totalBits);
-    cout << address << " | ";
-    cout << "VPN : " << hex << extractBits(virtualAddress, 0, VPNBits, totalBits) << " | ";
-    cout << "pageOffset : "  << extractBits(virtualAddress, tagBits + indexBits, tagBits + indexBits + pageOffSetBits, totalBits) << " | ";
-    cout << "Tag : " << extractBits(virtualAddress, 0, tagBits, totalBits) << " | ";
-    cout << "Tlb index : " << extractBits(virtualAddress, tagBits, tagBits + indexBits, totalBits) << " | ";
+    traceDataList[trace].virtualAddress = virtualAddress;
+    traceDataList[trace].pageOffset = pageOffSet;
 
     // Simulate TLB lookup
     TLBData tlbEntry = performTLBLookup(virtualAddress);
-    cout << "Page Index: " << tlbEntry.physicalPageNumber<<" | ";
+    traceDataList[trace].physicalPage = tlbEntry.physicalPageNumber;
     // printDTLB();
     // printPageTable();
 
@@ -729,26 +848,26 @@ void simulateMemoryAccess(string address, char accessType)
         totalWrites++;
     }
 
-    // // Update cache hit ratios
-    // dtlbHitRatio = (dtlbHits * 1.0) / (dtlbHits + dtlbMisses);
-    // ptHitRatio = (ptHits * 1.0) / (ptHits + ptFaults);
-    // dcHitRatio = (dcHits * 1.0) / (dcHits + dcMisses);
-    // l2HitRatio = (l2Hits * 1.0) / (l2Hits + l2Misses);
+    // Update cache hit ratios
+    dtlbHitRatio = (dtlbHits * 1.0) / (dtlbHits + dtlbMisses);
+    ptHitRatio = (ptHits * 1.0) / (ptHits + ptFaults);
+    dcHitRatio = (dcHits * 1.0) / (dcHits + dcMisses);
+    l2HitRatio = (l2Hits * 1.0) / (l2Hits + l2Misses);
 
-    // // Increment main memory references
-    // mainMemoryRefs++;
+    // Increment main memory references
+    mainMemoryRefs++;
 
-    // // Increment page table references if TLB is not used or TLB miss
-    // if (!config.useTLB || (config.useTLB && !tlbEntry.valid))
-    // {
-    //     pageTableRefs++;
-    // }
+    // Increment page table references if TLB is not used or TLB miss
+    if (!config.useTLB || (config.useTLB && !tlbEntry.valid))
+    {
+        pageTableRefs++;
+    }
 
-    // // Increment disk references in case of a TLB miss or a page table fault
-    // if (!tlbEntry.valid || !page.valid)
-    // {
-    //     diskRefs++;
-    // }
+    // Increment disk references in case of a TLB miss or a page table fault
+    if (!tlbEntry.valid )
+    {
+        diskRefs++;
+    }
 }
 
 int main()
@@ -761,17 +880,17 @@ int main()
     vector<string> traceData = readTraceFile("./trace.dat");
     // Iterate over each trace entry and simulate memory access
     initializeMemoryHierarchy();
+    printConfig();
     for (const string &traceEntry : traceData)
     {
         char accessType = traceEntry[0];
         string hexAddress = traceEntry.substr(2); // Assuming hex address starts at index 2
-
+        traceDataList.push_back(initTrace());
         simulateMemoryAccess(hexAddress, accessType);
-        // performDataCacheAccess(284, 28);
-        cout<<endl;
+        trace++;
     }
-
-    // printSimulationStatistics();
-
+    printHeader();
+    printTraceData();
+    printSimulationStatistics();
     return 0;
 }
