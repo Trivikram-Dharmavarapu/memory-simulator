@@ -66,7 +66,6 @@ struct Cache
 {
     int tag;
     bool valid;
-    bool dirty;
     int physicalPage;
     int index;
     int count;
@@ -103,12 +102,14 @@ struct TraceData
 struct DCSet
 {
     int setIndex;
+    bool dirty;
     vector<Cache> dcList;
 };
 
 struct L2Set
 {
     int setIndex;
+    bool dirty;
     vector<Cache> l2CacheList;
 };
 struct TLBSet
@@ -123,24 +124,24 @@ vector<DCSet> dcSetsList;
 vector<L2Set> l2SetsList;
 vector<TLBSet> tlbSetsList;
 
-int ptHits;
-int ptFaults;
-int dcHits;
-int dcMisses;
-int l2Hits;
-int l2Misses;
-int totalReads;
-int totalWrites;
-double ratioOfReads;
-int mainMemoryRefs;
-int pageTableRefs;
-int diskRefs;
+int ptHits = 0;
+int ptFaults = 0;
+int dcHits = 0;
+int dcMisses = 0;
+int l2Hits = 0;
+int l2Misses = 0;
+int totalReads = 0;
+int totalWrites = 0;
+double ratioOfReads = 0;
+int mainMemoryRefs = 0;
+int pageTableRefs = 0;
+int diskRefs = 0;
 int dtlbHits = 0;
 int dtlbMisses = 0;
-double dtlbHitRatio;
-double ptHitRatio;
-double dcHitRatio;
-double l2HitRatio;
+double dtlbHitRatio = 0;
+double ptHitRatio = 0;
+double dcHitRatio = 0;
+double l2HitRatio = 0;
 int pageOffSetBits, VPNBits, indexBits, tagBits, totalBits, physicalPageBits;
 int dcIndexBits, dcOffsetBits, dcTagBits, dcTotalBits;
 int l2IndexBits, l2OffsetBits, l2TagBits, l2TotalBits;
@@ -473,10 +474,11 @@ void printDC()
 
 void printSimulationStatistics()
 {
-    dtlbHitRatio = static_cast<double>(dtlbHits) / (dtlbHits + dtlbMisses);
-    ptHitRatio = static_cast<double>(ptHits) / (ptHits + ptFaults);
-    dcHitRatio = static_cast<double>(dcHits) / (dcHits + dcMisses);
-    l2HitRatio = static_cast<double>(l2Hits) / (l2Hits + l2Misses);
+    dtlbHitRatio = (dtlbHits + dtlbMisses) > 0 ? static_cast<double>(dtlbHits) / (dtlbHits + dtlbMisses) : 0;
+    ptHitRatio = (ptHits + ptFaults) > 0 ? static_cast<double>(ptHits) / (ptHits + ptFaults) : 0;
+    dcHitRatio = (dcHits + dcMisses) > 0 ? static_cast<double>(dcHits) / (dcHits + dcMisses) : 0;
+    l2HitRatio = (l2Hits + l2Misses) > 0 ? static_cast<double>(l2Hits) / (l2Hits + l2Misses) : 0;
+    ratioOfReads = (totalReads + totalWrites) > 0 ? static_cast<double>(totalReads) / (totalReads + totalWrites) : 0;
 
     // cout << endl<< "Simulation statistics" << endl<<endl;
     // cout << "dtlb hits : " << dtlbHits << endl;
@@ -501,34 +503,52 @@ void printSimulationStatistics()
     cout << endl
          << "Simulation statistics" << endl
          << endl;
-    cout << left << setw(20) << "dtlb hits : " << dtlbHits << endl;
-    cout << left << setw(20) << "dtlb misses : " << dtlbMisses << endl;
-    cout << left << setw(20) << "dtlb hit ratio : " << fixed << setprecision(6) << dtlbHitRatio << endl
+    cout << left << setw(17) << "dtlb hits"
+         << ": " << dtlbHits << endl;
+    cout << left << setw(17) << "dtlb misses"
+         << ": " << dtlbMisses << endl;
+    cout << left << setw(17) << "dtlb hit ratio"
+         << ": " << fixed << setprecision(6) << dtlbHitRatio << endl
          << endl;
-    cout << left << setw(20) << "pt hits : " << ptHits << endl;
-    cout << left << setw(20) << "pt faults : " << ptFaults << endl;
-    cout << left << setw(20) << "pt hit ratio : " << fixed << setprecision(6) << ptHitRatio << endl
+    cout << left << setw(17) << "pt hits"
+         << ": " << ptHits << endl;
+    cout << left << setw(17) << "pt faults"
+         << ": " << ptFaults << endl;
+    cout << left << setw(17) << "pt hit ratio"
+         << ": " << fixed << setprecision(6) << ptHitRatio << endl
          << endl;
-    cout << left << setw(20) << "dc hits : " << dcHits << endl;
-    cout << left << setw(20) << "dc misses : " << dcMisses << endl;
-    cout << left << setw(20) << "dc hit ratio : " << fixed << setprecision(6) << dcHitRatio << endl
+    cout << left << setw(17) << "dc hits"
+         << ": " << dcHits << endl;
+    cout << left << setw(17) << "dc misses"
+         << ": " << dcMisses << endl;
+    cout << left << setw(17) << "dc hit ratio"
+         << ": " << fixed << setprecision(6) << dcHitRatio << endl
          << endl;
-    cout << left << setw(20) << "L2 hits : " << l2Hits << endl;
-    cout << left << setw(20) << "L2 misses : " << l2Misses << endl;
-    cout << left << setw(20) << "L2 hit ratio : " << fixed << setprecision(6) << l2HitRatio << endl
+    cout << left << setw(17) << "L2 hits"
+         << ": " << l2Hits << endl;
+    cout << left << setw(17) << "L2 misses"
+         << ": " << l2Misses << endl;
+    cout << left << setw(17) << "L2 hit ratio"
+         << ": " << fixed << setprecision(6) << l2HitRatio << endl
          << endl;
-    cout << left << setw(20) << "Total reads : " << totalReads << endl;
-    cout << left << setw(20) << "Total writes : " << totalWrites << endl;
-    cout << left << setw(20) << "Ratio of reads : " << fixed << setprecision(6) << ratioOfReads << endl
+    cout << left << setw(17) << "Total reads"
+         << ": " << totalReads << endl;
+    cout << left << setw(17) << "Total writes"
+         << ": " << totalWrites << endl;
+    cout << left << setw(17) << "Ratio of reads"
+         << ": " << fixed << setprecision(6) << ratioOfReads << endl
          << endl;
-    cout << left << setw(20) << "main memory refs : " << mainMemoryRefs << endl;
-    cout << left << setw(20) << "page table refs : " << pageTableRefs << endl;
-    cout << left << setw(20) << "disk refs : " << diskRefs << endl;
+    cout << left << setw(17) << "main memory refs"
+         << ": " << mainMemoryRefs << endl;
+    cout << left << setw(17) << "page table refs"
+         << ": " << pageTableRefs << endl;
+    cout << left << setw(17) << "disk refs"
+         << ": " << diskRefs << endl;
 }
 
 void printConfig()
 {
-    
+
     cout << "Data TLB contains " << config.dtlbConfig.numSets << " sets." << endl;
     cout << "Each set contains " << config.dtlbConfig.setSize << " entries." << endl;
     cout << "Number of bits used for the index is " << indexBits << "." << endl
@@ -558,7 +578,7 @@ void printConfig()
     cout << "Number of bits used for the index is " << l2IndexBits << "." << endl;
     cout << "Number of bits used for the offset is " << l2OffsetBits << "." << endl
          << endl;
-    if (config.useVirtualAddresses == 'y')
+    if (config.useVirtualAddresses == 1)
     {
         cout << "The addresses read in are virtual addresses." << endl
              << endl;
@@ -570,7 +590,7 @@ void printConfig()
     }
 }
 
-void printTraceData()
+void printTraceData(FILE *file)
 {
     size_t arraySize = traceDataList.size();
     for (size_t i = 0; i < arraySize; ++i)
@@ -597,44 +617,44 @@ void printTraceData()
         // %08x %6x %4x %6x %3x %4s %4s %4x %6x %3x %4s %6x %3x %4s
         // Format each field using snprintf
         snprintf(formattedVirtualAddress, sizeof(formattedVirtualAddress), "%08x", traceDataList[i].virtualAddress);
-        snprintf(formattedVirtualPage, sizeof(formattedVirtualPage), traceDataList[i].virtualPage >= 0 ? "%6x" : "      ", traceDataList[i].virtualPage);
-        snprintf(formattedPageOffset, sizeof(formattedPageOffset), traceDataList[i].pageOffset >= 0 ? "%4x" : "    ", traceDataList[i].pageOffset);
-        snprintf(formattedTlbTag, sizeof(formattedTlbTag), traceDataList[i].tlbTag >= 0 ? "%6x" : "        ", traceDataList[i].tlbTag);
-        snprintf(formattedTlbIndex, sizeof(formattedTlbIndex), traceDataList[i].tlbIndex >= 0 ? "%3x" : "   ", traceDataList[i].tlbIndex);
-        snprintf(formattedTlbRes, sizeof(formattedTlbRes), traceDataList[i].tlbRes[0] != '\0' ? "%4s" : "    ", traceDataList[i].tlbRes);
-        snprintf(formattedPtRes, sizeof(formattedPtRes), traceDataList[i].ptRes[0] != '\0' ? "%4s" : "    ", traceDataList[i].ptRes);
-        snprintf(formattedPhysicalPage, sizeof(formattedPhysicalPage), traceDataList[i].physicalPage >= 0 ? "%4x" : "   ", traceDataList[i].physicalPage);
-        snprintf(formattedDcTag, sizeof(formattedDcTag), traceDataList[i].dcTag >= 0 ? "%6x" : "        ", traceDataList[i].dcTag);
-        snprintf(formattedDcIndex, sizeof(formattedDcIndex), traceDataList[i].dcIndex >= 0 ? "%3x" : "   ", traceDataList[i].dcIndex);
-        snprintf(formattedDcRes, sizeof(formattedDcRes), traceDataList[i].dcRes[0] != '\0' ? "%4s" : "    ", traceDataList[i].dcRes);
-        snprintf(formattedL2Tag, sizeof(formattedL2Tag), traceDataList[i].l2Tag >= 0 ? "%6x" : "        ", traceDataList[i].l2Tag);
-        snprintf(formattedL2Index, sizeof(formattedL2Index), traceDataList[i].l2Index >= 0 ? "%3x" : "   ", traceDataList[i].l2Index);
-        snprintf(formattedL2Res, sizeof(formattedL2Res), traceDataList[i].l2Res[0] != '\0' ? "%4s" : "    ", traceDataList[i].l2Res);
-
+        snprintf(formattedVirtualPage, sizeof(formattedVirtualPage), traceDataList[i].virtualPage >= 0 ? "%6x" : "", traceDataList[i].virtualPage);
+        snprintf(formattedPageOffset, sizeof(formattedPageOffset), traceDataList[i].pageOffset >= 0 ? "%4x" : "", traceDataList[i].pageOffset);
+        snprintf(formattedTlbTag, sizeof(formattedTlbTag), traceDataList[i].tlbTag >= 0 ? "%6x" : "", traceDataList[i].tlbTag);
+        snprintf(formattedTlbIndex, sizeof(formattedTlbIndex), traceDataList[i].tlbIndex >= 0 ? "%3x" : "", traceDataList[i].tlbIndex);
+        snprintf(formattedTlbRes, sizeof(formattedTlbRes), traceDataList[i].tlbRes[0] != '\0' ? "%s" : "", traceDataList[i].tlbRes);
+        snprintf(formattedPtRes, sizeof(formattedPtRes), traceDataList[i].ptRes[0] != '\0' ? "%s" : "", traceDataList[i].ptRes);
+        snprintf(formattedPhysicalPage, sizeof(formattedPhysicalPage), traceDataList[i].physicalPage >= 0 ? "%4x" : "", traceDataList[i].physicalPage);
+        snprintf(formattedDcTag, sizeof(formattedDcTag), traceDataList[i].dcTag >= 0 ? "%6x" : "", traceDataList[i].dcTag);
+        snprintf(formattedDcIndex, sizeof(formattedDcIndex), traceDataList[i].dcIndex >= 0 ? "%3x" : "", traceDataList[i].dcIndex);
+        snprintf(formattedDcRes, sizeof(formattedDcRes), traceDataList[i].dcRes[0] != '\0' ? "%s" : "", traceDataList[i].dcRes);
+        snprintf(formattedL2Tag, sizeof(formattedL2Tag), traceDataList[i].l2Tag >= 0 ? "%6x" : "", traceDataList[i].l2Tag);
+        snprintf(formattedL2Index, sizeof(formattedL2Index), traceDataList[i].l2Index >= 0 ? "%3x" : "", traceDataList[i].l2Index);
         // Print all fields
-        printf("%s %s %s %s %s %s %s %4x %s %s %s %s %s %s\n",
-               formattedVirtualAddress,
-               formattedVirtualPage,
-               formattedPageOffset,
-               formattedTlbTag,
-               formattedTlbIndex,
-               formattedTlbRes,
-               formattedPtRes,
-               traceDataList[i].physicalPage,
-               formattedDcTag,
-               formattedDcIndex,
-               formattedDcRes,
-               formattedL2Tag,
-               formattedL2Index,
-               formattedL2Res);
+        fprintf(file, "%s %s %s %s %s %-4s %-4s %4x %s %s %-4s",
+                formattedVirtualAddress,
+                formattedVirtualPage,
+                formattedPageOffset,
+                formattedTlbTag,
+                formattedTlbIndex,
+                formattedTlbRes,
+                formattedPtRes,
+                traceDataList[i].physicalPage,
+                formattedDcTag,
+                formattedDcIndex,
+                formattedDcRes);
+        if (formattedL2Index[0] != '\0')
+            fprintf(file, " %s", formattedL2Tag);
+        if (formattedL2Index[0] != '\0')
+            fprintf(file, " %s", formattedL2Index);
+        fprintf(file, " %s\n", traceDataList[i].l2Res);
     }
 }
 
-void printHeader()
+void printHeader(FILE *file)
 {
-    printf("Virtual  Virt.  Page TLB    TLB TLB  PT   Phys        DC  DC          L2  L2\n");
-    printf("Address  Page # Off  Tag    Ind Res. Res. Pg # DC Tag Ind Res  L2 Tag Ind Res.\n");
-    printf("-------- ------ ---- ------ --- ---- ---- ---- ------ --- ---- ------ --- ----\n");
+    fprintf(file, "Virtual  Virt.  Page TLB    TLB TLB  PT   Phys        DC  DC          L2  L2\n");
+    fprintf(file, "Address  Page # Off  Tag    Ind Res. Res. Pg # DC Tag Ind Res. L2 Tag Ind Res.\n");
+    fprintf(file, "-------- ------ ---- ------ --- ---- ---- ---- ------ --- ---- ------ --- ----\n");
 }
 
 int extractBits(int value, int startBit, int endBit, int totalBits)
@@ -674,6 +694,7 @@ void initCache()
     {
         dcSetsList[i].setIndex = i;
         dcSetsList[i].dcList.resize(config.dcConfig.setSize);
+        dcSetsList[i].dirty = false;
         for (int j = 0; j < dcSetsList[i].dcList.size(); j++)
         {
             Cache entry;
@@ -693,6 +714,7 @@ void initL2Cache()
     {
         l2SetsList[i].setIndex = i;
         l2SetsList[i].l2CacheList.resize(config.l2Config.setSize);
+        l2SetsList[i].dirty = false;
         for (int j = 0; j < l2SetsList[i].l2CacheList.size(); j++)
         {
             Cache entry;
@@ -738,8 +760,63 @@ void ptinit()
     }
 }
 
+Cache writeToDC(int index, int tag)
+{
+    Cache dcEntry;
+    int lruIndex = LRU(dcSetsList[index].dcList);
+    dcEntry.tag = tag;
+    dcEntry.valid = true;
+    dcEntry.index = lruIndex;
+    dcEntry.count = 0;
+    dcSetsList[index].dcList[lruIndex] = dcEntry;
+    return dcSetsList[index].dcList[lruIndex];
+}
+
+int findDCData(int index, int tag)
+{
+    int key = -1;
+    for (int i = 0; i < dcSetsList[index].dcList.size(); i++)
+    {
+        if (dcSetsList[index].dcList[i].tag == tag)
+        {
+            key = i;
+            break;
+        }
+    }
+    return key;
+}
+
+Cache writeToL2(int index, int tag)
+{
+    int lruIndex = LRU(l2SetsList[index].l2CacheList);
+    Cache l2Entry;
+    l2Entry.tag = tag;
+    l2Entry.valid = true;
+    l2Entry.index = lruIndex;
+    l2Entry.count = 0;
+    l2SetsList[index].l2CacheList[lruIndex] = l2Entry;
+    return l2SetsList[index].l2CacheList[lruIndex];
+}
+
+void updateDCTOL2(int dcSet)
+{
+    for (int i = 0; i < dcSetsList[dcSet].dcList.size(); i++)
+    {
+        int dcTag = dcSetsList[dcSet].dcList[i].tag;
+        int l2Tag = extractBits(dcTag, 0, l2TagBits, l2TagBits);
+        int l2Index = extractBits(dcTag, l2TagBits, l2IndexBits, l2IndexBits);
+        cout << l2Tag << " :" << l2Index << endl;
+        writeToL2(l2Index, l2Tag);
+    }
+}
+
 void initializeMemoryHierarchy()
 {
+
+    // Clear the cout output file initially
+    ofstream coutFile("trace_out.txt", ios::trunc);
+    coutFile.close();
+
     dtlbHits = 0;
     dtlbMisses = 0;
     ptHits = 0;
@@ -787,20 +864,13 @@ Cache performL2CacheAccess(int physicalAddess, int pageOffset, char accessType)
     {
         strcpy(traceDataList[trace].l2Res, "miss");
         l2Misses++;
-        int lruIndex = LRU(l2SetsList[index].l2CacheList);
-        Cache l2Entry;
-        l2Entry.tag = tag;
-        l2Entry.valid = true;
-        l2Entry.dirty = false;
-        l2Entry.index = lruIndex;
-        l2Entry.count = 0;
-        l2SetsList[index].l2CacheList[lruIndex] = l2Entry;
-        l2Cache = l2SetsList[index].l2CacheList[lruIndex];
+        l2Cache = writeToL2(index, tag);
+        mainMemoryRefs++;
     }
     return l2Cache;
 }
 
-Cache performDataCacheAccess(int physicalAddess, int pageOffSet, char accessType)
+void performDataCacheAccess(int physicalAddess, int pageOffSet, char accessType)
 {
     Cache dcCache;
     int index = extractBits(physicalAddess, dcTagBits, dcTagBits + dcIndexBits, dcTotalBits);
@@ -810,43 +880,104 @@ Cache performDataCacheAccess(int physicalAddess, int pageOffSet, char accessType
 
     traceDataList[trace].dcIndex = index;
     traceDataList[trace].dcTag = tag;
-    bool flag = false;
-    for (int i = 0; i < dcSetsList[index].dcList.size(); i++)
+    int key = findDCData(index, tag);
+    bool writeToL2 = false;
+    bool writeTodc = false;
+    if (key != -1)
     {
-        if (dcSetsList[index].dcList[i].tag == tag)
-        {
-            strcpy(traceDataList[trace].dcRes, "hit ");
-            dcHits++;
-            dcSetsList[index].dcList[i].count++;
-            dcCache = dcSetsList[index].dcList[i];
-            flag = true;
-        }
+        strcpy(traceDataList[trace].dcRes, "hit");
+        dcHits++;
+        dcSetsList[index].dcList[key].count++;
     }
-    if (flag == false)
+    else
     {
         strcpy(traceDataList[trace].dcRes, "miss");
         dcMisses++;
-        Cache l2Cache = performL2CacheAccess(physicalAddess, pageOffSet, accessType);
-        Cache dcEntry;
-        int lruIndex = LRU(dcSetsList[index].dcList);
-        dcEntry.tag = tag;
-        dcEntry.valid = true;
-        dcEntry.dirty = false;
-        dcEntry.index = lruIndex;
-        dcEntry.count = 0;
-        dcSetsList[index].dcList[lruIndex] = dcEntry;
-        dcCache = dcSetsList[index].dcList[lruIndex];
     }
-    return dcCache;
+    if (config.dcConfig.writeThroughOrNoWriteAllocate == 1)
+    {
+        // Write
+        if (accessType == 'W')
+        {
+            if (key != -1) // Hit
+            {
+                dcCache = dcSetsList[index].dcList[key];
+                writeToL2 = true;
+            }
+            else
+            {
+                writeToL2 = true;
+            }
+        }
+        // Read
+        else
+        {
+            if (key != -1)
+            {
+                dcCache = dcSetsList[index].dcList[key];
+            }
+            else
+            {
+                writeToL2 = true;
+                writeTodc = true;
+            }
+        }
+    }
+    else
+    {
+        if (accessType == 'W')
+        {
+            if (key != -1) // Hit
+            {
+                dcCache = dcSetsList[index].dcList[key];
+            }
+            else
+            {
+                if (dcSetsList[index].dirty)
+                {
+                    // update set
+                    updateDCTOL2(index);
+                    dcSetsList[index].dirty = false;
+                }
+                writeTodc = true;
+            }
+        }
+        else
+        {
+            if (key != -1)
+            {
+                dcCache = dcSetsList[index].dcList[key];
+            }
+            else
+            {
+                if (dcSetsList[index].dirty)
+                {
+                    // update set
+                    updateDCTOL2(index);
+                    dcSetsList[index].dirty = false;
+                }
+                writeTodc = true;
+            }
+        }
+    }
+    if (writeToL2 && config.useL2Cache == 1)
+    {
+        Cache l2Cache = performL2CacheAccess(physicalAddess, pageOffSet, accessType);
+    }
+    if (writeTodc == true)
+    {
+        dcCache = writeToDC(index, tag);
+    }
 }
 
 Page performPageTableLookup(int virtualPageNumber)
 {
+    pageTableRefs++;
     for (int i = 0; i < pageTableList.size(); i++)
     {
         if (pageTableList[i].virtualPage == virtualPageNumber)
         {
-            strcpy(traceDataList[trace].ptRes, "hit ");
+            strcpy(traceDataList[trace].ptRes, "hit");
             ptHits++;
             pageTableList[i].count++;
             return pageTableList[i];
@@ -862,6 +993,7 @@ Page performPageTableLookup(int virtualPageNumber)
     }
     strcpy(traceDataList[trace].ptRes, "miss");
     ptFaults++;
+    diskRefs++;
     Page pageData;
     pageData.physicalPage = currenPhysicalPageAddress;
     pageData.index = currenPhysicalPageAddress;
@@ -879,7 +1011,6 @@ TLBData performTLBLookup(int virtualAddress)
     int index = extractBits(virtualAddress, tagBits, tagBits + indexBits, totalBits);
     int tag = extractBits(virtualAddress, 0, tagBits, totalBits);
 
-    traceDataList[trace].virtualPage = virtualPageNumber;
     traceDataList[trace].tlbIndex = index;
     traceDataList[trace].tlbTag = tag;
     bool flag = false;
@@ -888,7 +1019,7 @@ TLBData performTLBLookup(int virtualAddress)
         if (tlbSetsList[index].tlbDataList[i].tag == tag)
         {
             dtlbHits++;
-            strcpy(traceDataList[trace].tlbRes, "hit ");
+            strcpy(traceDataList[trace].tlbRes, "hit");
             tlbSetsList[index].tlbDataList[i].count++;
             tLBData = tlbSetsList[index].tlbDataList[i];
             flag = true;
@@ -920,19 +1051,33 @@ void simulateMemoryAccess(string address, char accessType)
     int pageOffSet = extractBits(virtualAddress, tagBits + indexBits, tagBits + indexBits + pageOffSetBits, totalBits);
     traceDataList[trace].virtualAddress = virtualAddress;
     traceDataList[trace].pageOffset = pageOffSet;
+    int virtualPageNumber = extractBits(virtualAddress, 0, VPNBits, totalBits);
+    traceDataList[trace].virtualPage = virtualPageNumber;
 
     // Simulate TLB lookup
-    TLBData tlbEntry = performTLBLookup(virtualAddress);
-    traceDataList[trace].physicalPage = tlbEntry.physicalPageNumber;
+    int pageNum;
+    if (config.useTLB == 1)
+    {
+        TLBData tlbEntry = performTLBLookup(virtualAddress);
+        traceDataList[trace].physicalPage = tlbEntry.physicalPageNumber;
+        pageNum = tlbEntry.physicalPageNumber;
+    }
+    else
+    {
+        Page page = performPageTableLookup(virtualAddress);
+        traceDataList[trace].physicalPage = page.physicalPage;
+        pageNum = page.physicalPage;
+        ;
+    }
     // printDTLB();
     // printPageTable();
 
     // DC LookUP
-    string pageValue = convertHex(tlbEntry.physicalPageNumber, config.ptConfig.numPhysicalPages / 4);
+    string pageValue = convertHex(pageNum, config.ptConfig.numPhysicalPages / 4);
     string pageOffsetValue = convertHex(pageOffSet, pageOffSetBits / 4);
     int physicalAddress = concatAsHex(pageValue, pageOffsetValue);
     // cout<<pageValue<<" : "<<pageOffsetValue<<" : "<<physicalAddress;
-    Cache dcCache = performDataCacheAccess(physicalAddress, pageOffSet, accessType);
+    performDataCacheAccess(physicalAddress, pageOffSet, accessType);
     // printDC();
 
     if (accessType == 'R')
@@ -949,23 +1094,27 @@ void simulateMemoryAccess(string address, char accessType)
     ptHitRatio = (ptHits * 1.0) / (ptHits + ptFaults);
     dcHitRatio = (dcHits * 1.0) / (dcHits + dcMisses);
     l2HitRatio = (l2Hits * 1.0) / (l2Hits + l2Misses);
-
-    // Increment main memory references
-    mainMemoryRefs++;
-
-    // Increment page table references if TLB is not used or TLB miss
-    if (!config.useTLB || (config.useTLB && !tlbEntry.valid))
-    {
-        pageTableRefs++;
-    }
-
-    // Increment disk references in case of a TLB miss or a page table fault
-    if (!tlbEntry.valid)
-    {
-        diskRefs++;
-    }
 }
 
+void printFile()
+{
+    FILE *readFile = fopen("trace_out.txt", "r");
+
+    if (readFile != nullptr)
+    {
+
+        // Print every line of the file
+        cout << "File content:" << endl;
+        char line[256]; // Adjust the buffer size as needed
+        while (fgets(line, sizeof(line), readFile))
+        {
+            printf("%s", line);
+        }
+
+        // Close the file
+        fclose(readFile);
+    }
+}
 int main()
 {
     config = readConfigFile("./trace.config");
@@ -976,6 +1125,10 @@ int main()
     vector<string> traceData = readTraceFile("./trace.dat");
     // Iterate over each trace entry and simulate memory access
     initializeMemoryHierarchy();
+
+    ofstream outputFile("trace_out.txt", ios::app);
+    streambuf *coutbuf = cout.rdbuf(); // Save old buf
+    cout.rdbuf(outputFile.rdbuf());
     printConfig();
     for (const string &traceEntry : traceData)
     {
@@ -985,8 +1138,15 @@ int main()
         simulateMemoryAccess(hexAddress, accessType);
         trace++;
     }
-    printHeader();
-    printTraceData();
+
+    FILE *printfFile = fopen("trace_out.txt", "a");
+    printHeader(printfFile);
+    printTraceData(printfFile);
+    fclose(printfFile);
+
     printSimulationStatistics();
+    outputFile.close();
+
+    printFile();
     return 0;
 }

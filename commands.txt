@@ -12,3 +12,4 @@ del *.o ; del *.exe
 
 //
 del *.o ; del *.exe ; g++ memhier.cpp ; g++ memhier.cpp -o memhier.exe ; ./memhier ; .\memhier
+g++ -std=c++11 your_program.cpp -o your_program
