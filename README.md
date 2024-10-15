@@ -100,5 +100,3 @@ R 0x3C4D
 This project is open-source and available under the MIT License.
 
 ---
-
-This `README` outlines the core functionality and usage of the memory simulation system. It guides users through setting up, running, and understanding the simulation and its results.
